@@ -3,7 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <title>PC1 - WebRTC</title>
-  <style> video { width: 30%; margin: 5px; border: 2px solid #ccc; } </style>
+  <style>
+    video {
+      width: 30%;
+      margin: 5px;
+      border: 2px solid #ccc;
+    }
+  </style>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 </head>
@@ -15,13 +21,13 @@
     const id = "pc3";
     const room = "sala123";
     const firebaseConfig = {
-        apiKey: "AIzaSyCSucYM3S3dJaqb-7u8WXAKUkTz6crdRyk",
-        authDomain: "perna-nodejs.firebaseapp.com",
-        databaseURL: "https://perna-nodejs-default-rtdb.firebaseio.com",
-        projectId: "perna-nodejs",
-        storageBucket: "perna-nodejs.firebasestorage.app",
-        messagingSenderId: "759045394749",
-        appId: "1:759045394749:web:03b90a09314d7398d87554"
+      apiKey: "AIzaSyCSucYM3S3dJaqb-7u8WXAKUkTz6crdRyk",
+      authDomain: "perna-nodejs.firebaseapp.com",
+      databaseURL: "https://perna-nodejs-default-rtdb.firebaseio.com",
+      projectId: "perna-nodejs",
+      storageBucket: "perna-nodejs.firebasestorage.app",
+      messagingSenderId: "759045394749",
+      appId: "1:759045394749:web:03b90a09314d7398d87554"
     };
 
     firebase.initializeApp(firebaseConfig);
@@ -67,15 +73,17 @@
 
       if (isInitiator) {
         pc.createOffer().then(offer => {
-          pc.setLocalDescription(offer);
-          sendSignal(remoteId, { type: 'offer', sdp: offer });
+          return pc.setLocalDescription(offer).then(() => {
+            sendSignal(remoteId, { type: 'offer', sdp: offer });
+          });
         });
       } else if (offer) {
         pc.setRemoteDescription(new RTCSessionDescription(offer.sdp)).then(() => {
           return pc.createAnswer();
         }).then(answer => {
-          pc.setLocalDescription(answer);
-          sendSignal(remoteId, { type: 'answer', sdp: answer });
+          return pc.setLocalDescription(answer);
+        }).then(() => {
+          sendSignal(remoteId, { type: 'answer', sdp: pc.localDescription });
         });
       }
     }
@@ -95,8 +103,16 @@
         if (data.type === 'answer') {
           pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
         }
+
         if (data.type === 'ice') {
-          pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+          const candidate = data.candidate;
+          if (candidate && candidate.sdpMid !== null && candidate.sdpMLineIndex !== null) {
+            pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+              console.error("Erro ao adicionar ICE Candidate:", err, candidate);
+            });
+          } else {
+            console.warn("ICE Candidate inválido ignorado:", candidate);
+          }
         }
 
         snapshot.ref.remove();
@@ -130,48 +146,3 @@
   </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<!-- 
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
-
-  // Your web app's Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyCSucYM3S3dJaqb-7u8WXAKUkTz6crdRyk",
-    authDomain: "perna-nodejs.firebaseapp.com",
-    databaseURL: "https://perna-nodejs-default-rtdb.firebaseio.com",
-    projectId: "perna-nodejs",
-    storageBucket: "perna-nodejs.firebasestorage.app",
-    messagingSenderId: "759045394749",
-    appId: "1:759045394749:web:03b90a09314d7398d87554"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-</script> -->
