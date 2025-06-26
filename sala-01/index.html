@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>PC1 - WebRTC</title>
+  <style> video { width: 30%; margin: 5px; border: 2px solid #ccc; } </style>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+</head>
+<body>
+  <h2>Você é o PC1</h2>
+  <div id="videos"></div>
+
+  <script>
+    const id = "pc1";
+    const room = "sala123";
+    const firebaseConfig = {
+        apiKey: "AIzaSyCSucYM3S3dJaqb-7u8WXAKUkTz6crdRyk",
+        authDomain: "perna-nodejs.firebaseapp.com",
+        databaseURL: "https://perna-nodejs-default-rtdb.firebaseio.com",
+        projectId: "perna-nodejs",
+        storageBucket: "perna-nodejs.firebasestorage.app",
+        messagingSenderId: "759045394749",
+        appId: "1:759045394749:web:03b90a09314d7398d87554"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const videoContainer = document.getElementById('videos');
+    const peers = {};
+    let localStream;
+
+    function addVideo(stream, id) {
+      let video = document.getElementById("video_" + id);
+      if (!video) {
+        video = document.createElement("video");
+        video.id = "video_" + id;
+        video.autoplay = true;
+        video.playsInline = true;
+        videoContainer.appendChild(video);
+      }
+      video.srcObject = stream;
+    }
+
+    function sendSignal(targetId, data) {
+      const ref = db.ref(`${room}/${targetId}/signals`).push();
+      ref.set({ from: id, data });
+    }
+
+    function setupPeer(remoteId, isInitiator, offer = null) {
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      });
+      peers[remoteId] = pc;
+
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {
+          sendSignal(remoteId, { type: 'ice', candidate: e.candidate });
+        }
+      };
+
+      pc.ontrack = (event) => {
+        addVideo(event.streams[0], remoteId);
+      };
+
+      if (isInitiator) {
+        pc.createOffer().then(offer => {
+          pc.setLocalDescription(offer);
+          sendSignal(remoteId, { type: 'offer', sdp: offer });
+        });
+      } else if (offer) {
+        pc.setRemoteDescription(new RTCSessionDescription(offer.sdp)).then(() => {
+          return pc.createAnswer();
+        }).then(answer => {
+          pc.setLocalDescription(answer);
+          sendSignal(remoteId, { type: 'answer', sdp: answer });
+        });
+      }
+    }
+
+    function listenToSignals() {
+      db.ref(`${room}/${id}/signals`).on("child_added", snapshot => {
+        const msg = snapshot.val();
+        const from = msg.from;
+        const data = msg.data;
+        if (!peers[from] && data.type === 'offer') {
+          setupPeer(from, false, data);
+        }
+
+        const pc = peers[from];
+        if (!pc) return;
+
+        if (data.type === 'answer') {
+          pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        }
+        if (data.type === 'ice') {
+          pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+
+        snapshot.ref.remove();
+      });
+    }
+
+    function connectToPeers() {
+      db.ref(room).once('value', snapshot => {
+        const participants = snapshot.val();
+        if (!participants) return;
+        Object.keys(participants).forEach(otherId => {
+          if (otherId !== id && !peers[otherId]) {
+            setupPeer(otherId, true);
+          }
+        });
+      });
+    }
+
+    navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      .then(stream => {
+        localStream = stream;
+        addVideo(stream, id);
+        db.ref(`${room}/${id}`).set({ joined: Date.now() });
+        listenToSignals();
+        setTimeout(connectToPeers, 1000);
+      });
+
+    window.addEventListener("beforeunload", () => {
+      db.ref(`${room}/${id}`).remove();
+    });
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- 
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyCSucYM3S3dJaqb-7u8WXAKUkTz6crdRyk",
+    authDomain: "perna-nodejs.firebaseapp.com",
+    databaseURL: "https://perna-nodejs-default-rtdb.firebaseio.com",
+    projectId: "perna-nodejs",
+    storageBucket: "perna-nodejs.firebasestorage.app",
+    messagingSenderId: "759045394749",
+    appId: "1:759045394749:web:03b90a09314d7398d87554"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+</script> -->
